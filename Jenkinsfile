@@ -26,12 +26,13 @@ pipeline {
             }
         }
 
-     stage('SonarQube Analysis') {
+    stage('SonarQube Analysis') {
     steps {
         withSonarQubeEnv('SonarQube') {
             withEnv(["PATH+SONAR=${tool 'SonarScanner'}/bin"]) {
                 script {
                     if (fileExists('build.gradle')) {
+                        sh "chmod +x gradlew"
                         sh "./gradlew test"
                         sh "sonar-scanner -Dsonar.projectKey=${SERVICE} -Dsonar.projectName=${SERVICE} -Dsonar.sources=. -Dsonar.java.binaries=build/classes"
                     } else {
@@ -41,8 +42,8 @@ pipeline {
             }
         }
     }
-}
-
+}       
+        
         stage('SonarQube Quality Gate') {
             steps {
                 timeout(time: 10, unit: 'MINUTES') {
