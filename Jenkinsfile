@@ -30,7 +30,7 @@ pipeline {
     steps {
         withSonarQubeEnv('SonarQube') {
             withEnv(["PATH+SONAR=${tool 'SonarScanner'}/bin"]) {
-                sh "sonar-scanner -Dsonar.projectKey=${SERVICE} -Dsonar.projectName=${SERVICE} -Dsonar.sources=."
+                sh "sonar-scanner -Dsonar.projectKey=${SERVICE} -Dsonar.projectName=${SERVICE} -Dsonar.sources=. -Dsonar.verbose=true"
                 sh "find . -name report-task.txt -print"
             }
         }
