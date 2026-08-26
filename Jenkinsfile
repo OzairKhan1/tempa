@@ -16,7 +16,7 @@ pipeline {
 
         stage('Git Clone') {
             steps {
-                gitClone("https://github.com/OzairKhan1/DevSecOps.git", SERVICE, "git-creds")
+                gitClone("https://github.com/OzairKhan1/tempa.git", SERVICE, "git-creds")
             }
         }
 
@@ -26,15 +26,16 @@ pipeline {
             }
         }
 
-        stage('SonarQube Analysis') {
+     stage('SonarQube Analysis') {
     steps {
         withSonarQubeEnv('SonarQube') {
             withEnv(["PATH+SONAR=${tool 'SonarScanner'}/bin"]) {
                 sh "sonar-scanner -Dsonar.projectKey=${SERVICE} -Dsonar.projectName=${SERVICE} -Dsonar.sources=."
-                }
-              }
-			}
-		}
+                sh "find . -name report-task.txt -print"
+            }
+        }
+    }
+}
 
         stage('SonarQube Quality Gate') {
             steps {
