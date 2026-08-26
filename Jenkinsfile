@@ -29,9 +29,15 @@ pipeline {
      stage('SonarQube Analysis') {
     steps {
         withSonarQubeEnv('SonarQube') {
-            withEnv(["PATH+SONAR=${tool 'sonar-scanner'}/bin"]) {
-                sh "sonar-scanner -Dsonar.projectKey=${SERVICE} -Dsonar.projectName=${SERVICE} -Dsonar.sources=. -Dsonar.verbose=true"
-                sh "find . -name report-task.txt -print"
+            withEnv(["PATH+SONAR=${tool 'SonarScanner'}/bin"]) {
+                script {
+                    if (fileExists('build.gradle')) {
+                        sh "./gradlew test"
+                        sh "sonar-scanner -Dsonar.projectKey=${SERVICE} -Dsonar.projectName=${SERVICE} -Dsonar.sources=. -Dsonar.java.binaries=build/classes"
+                    } else {
+                        sh "sonar-scanner -Dsonar.projectKey=${SERVICE} -Dsonar.projectName=${SERVICE} -Dsonar.sources=."
+                    }
+                }
             }
         }
     }
