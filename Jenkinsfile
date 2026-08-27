@@ -6,7 +6,6 @@ pipeline {
     tools {
         jdk 'JDK-19'
         gradle 'Gradle'
-        sonarQube 'SonarScanner'
     }
     
     environment {
@@ -17,6 +16,8 @@ pipeline {
         MANIFEST_REPO = "https://github.com/OzairKhan1/Kubernetes-ManifestFiles.git"
         MANIFEST_DIR  = "11-Microservices-Manifests"
         JAVA_HOME = "/usr/lib/jvm/java-21-openjdk-amd64/bin/java"
+
+        SONAR_SCANNER = tool 'SonarScanner'
     }
 
     stages {
