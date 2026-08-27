@@ -45,7 +45,7 @@ pipeline {
             }
         }
     }
-}    
+}   
         
 //         stage('SonarQube Quality Gate') {
 //             steps {
