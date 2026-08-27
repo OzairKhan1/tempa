@@ -10,6 +10,7 @@ pipeline {
         IMAGE         = "${DOCKERHUB_NS}/${SERVICE}:${IMAGE_TAG}"
         MANIFEST_REPO = "https://github.com/OzairKhan1/Kubernetes-ManifestFiles.git"
         MANIFEST_DIR  = "11-Microservices-Manifests"
+        JAVA_HOME = "/usr/lib/jvm/java-21-openjdk-amd64/bin/java"
     }
 
     stages {
@@ -32,7 +33,7 @@ pipeline {
             withEnv(["PATH+SONAR=${tool 'SonarScanner'}/bin"]) {
                 script {
                     if (fileExists('build.gradle')) {
-                        withEnv(["JAVA_HOME=${tool 'JDK-21'}", "PATH+JAVA=${tool 'JDK-21'}/bin", "PATH+GRADLE=${tool 'Gradle-8.14'}/bin"]) {
+                        withEnv(["JAVA_HOME=${JAVA_HOME}, "PATH+JAVA=${tool 'JDK-21'}/bin", "PATH+GRADLE=${tool 'Gradle-8.14'}/bin"]) {
                             sh "java -version"
                             sh "gradle --version"
                             sh "gradle test"
