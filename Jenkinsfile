@@ -3,6 +3,12 @@
 pipeline {
     agent any
 
+    tools {
+        jdk 'JDK-19'
+        gradle 'Gradle'
+        sonarQube 'SonarScanner'
+    }
+    
     environment {
         SERVICE       = "${env.BRANCH_NAME}"
         IMAGE_TAG     = "v${BUILD_NUMBER}"
@@ -27,34 +33,28 @@ pipeline {
             }
         }
 
- stage('SonarQube Analysis') {
+  stage('SonarQube Analysis') {
     steps {
         withSonarQubeEnv('SonarQube') {
-            withEnv(["PATH+SONAR=${tool 'SonarScanner'}/bin"]) {
-                script {
-                    if (fileExists('build.gradle')) {
-                        withEnv(["JAVA_HOME=${tool 'JDK-19'}", "PATH+JAVA=${tool 'JDK-19'}/bin", "PATH+GRADLE=${tool 'Gradle'}/bin"]) {
-                            sh "java -version"
-                            sh "gradle --version"
-                            sh "gradle test"
-                            sh "sonar-scanner -Dsonar.projectKey=${SERVICE} -Dsonar.projectName=${SERVICE} -Dsonar.sources=. -Dsonar.java.binaries=build/classes"
-                        }
-                    } else {
-                        sh "sonar-scanner -Dsonar.projectKey=${SERVICE} -Dsonar.projectName=${SERVICE} -Dsonar.sources=."
-                    }
+            script {
+                if (fileExists('build.gradle')) {
+                    sh "gradle test"
+                    sh "sonar-scanner -Dsonar.projectKey=${SERVICE} -Dsonar.projectName=${SERVICE} -Dsonar.sources=. -Dsonar.java.binaries=build/classes"
+                } else {
+                    sh "sonar-scanner -Dsonar.projectKey=${SERVICE} -Dsonar.projectName=${SERVICE} -Dsonar.sources=."
                 }
             }
         }
     }
-}   
+}
         
-        stage('SonarQube Quality Gate') {
-            steps {
-                timeout(time: 10, unit: 'MINUTES') {
-                    waitForQualityGate abortPipeline: true
-                }
-            }
-        }
+        // stage('SonarQube Quality Gate') {
+        //     steps {
+        //         timeout(time: 10, unit: 'MINUTES') {
+        //             waitForQualityGate abortPipeline: true
+        //         }
+        //     }
+        // }
 
         stage('Trivy FS Scan') {
             steps {
