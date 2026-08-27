@@ -34,15 +34,15 @@ pipeline {
             }
         }
 
-  stage('SonarQube Analysis') {
+stage('SonarQube Analysis') {
     steps {
         withSonarQubeEnv('SonarQube') {
             script {
                 if (fileExists('build.gradle')) {
                     sh "gradle test"
-                    sh "sonar-scanner -Dsonar.projectKey=${SERVICE} -Dsonar.projectName=${SERVICE} -Dsonar.sources=. -Dsonar.java.binaries=build/classes"
+                    sh "${SONAR_SCANNER}/bin/sonar-scanner -Dsonar.projectKey=${SERVICE} -Dsonar.projectName=${SERVICE} -Dsonar.sources=. -Dsonar.java.binaries=build/classes"
                 } else {
-                    sh "sonar-scanner -Dsonar.projectKey=${SERVICE} -Dsonar.projectName=${SERVICE} -Dsonar.sources=."
+                    sh "${SONAR_SCANNER}/bin/sonar-scanner -Dsonar.projectKey=${SERVICE} -Dsonar.projectName=${SERVICE} -Dsonar.sources=."
                 }
             }
         }
