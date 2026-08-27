@@ -32,7 +32,7 @@ pipeline {
             withEnv(["PATH+SONAR=${tool 'SonarScanner'}/bin"]) {
                 script {
                     if (fileExists('build.gradle')) {
-                        withEnv(["JAVA_HOME=${tool 'JDK-21'}", "PATH+JAVA=${tool 'JDK-21'}/bin", "PATH+GRADLE=${tool 'Gradle-8.14.4'}/bin"]) {
+                        withEnv(["JAVA_HOME=${tool 'JDK-21'}", "PATH+JAVA=${tool 'JDK-21'}/bin", "PATH+GRADLE=${tool 'Gradle-8.14'}/bin"]) {
                             sh "java -version"
                             sh "gradle --version"
                             sh "gradle test"
