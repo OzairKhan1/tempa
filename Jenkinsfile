@@ -33,11 +33,11 @@ pipeline {
             withEnv(["PATH+SONAR=${tool 'SonarScanner'}/bin"]) {
                 script {
                     if (fileExists('build.gradle')) {
-                        withEnv(["JAVA_HOME=${JAVA_HOME}, "PATH+JAVA=${tool 'JDK-21'}/bin", "PATH+GRADLE=${tool 'Gradle-8.14'}/bin"]) {
+                        withEnv(["JAVA_HOME=${tool 'JDK-21'}", "PATH+JAVA=${tool 'JDK-21'}/bin", "PATH+GRADLE=${tool 'Gradle-8.14.4'}/bin"]) {
+                            sh "echo JAVA_HOME=$JAVA_HOME"
                             sh "java -version"
                             sh "gradle --version"
                             sh "gradle test"
-                            sh "sonar-scanner -Dsonar.projectKey=${SERVICE} -Dsonar.projectName=${SERVICE} -Dsonar.sources=. -Dsonar.java.binaries=build/classes"
                         }
                     } else {
                         sh "sonar-scanner -Dsonar.projectKey=${SERVICE} -Dsonar.projectName=${SERVICE} -Dsonar.sources=."
