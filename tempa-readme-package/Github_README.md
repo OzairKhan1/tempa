@@ -19,8 +19,8 @@
 
 </div>
 
-> **Status.** The app, container images, manifests and the GitLab CI pipeline exist in this repo and have run on a local k3s cluster.
-> Everything marked **(planned)** below – EKS, EBS CSI StorageClass, ALB Ingress, Argo CD, ServiceAccounts/IRSA, Prometheus stack – is the target design this README documents; the manifests for it are given inline so you can add them to the repo.
+> **Status.** The app, container images, manifests and the GitLab CI pipeline exist in this repo and have run on a local k3s cluster for local Testing. .
+> Everything marked **(planned)** below – EKS, EBS CSI StorageClass, ALB Ingress, Argo CD, ServiceAccounts/IRSA, Prometheus stack – is the target design Implemented On AWS EKS. this README documents; the manifests for it are given inline so it can be used as a future guide for everyone who need Production Implementation. The Architecture diagram has combined both the local Pv and dynamic Pv into same Diagram. One can be used at a time. 
 > All images used here live in [`docs/images/`](docs/images/).
 
 ---
@@ -56,13 +56,13 @@
 | 3 | Ingress | The AWS Load Balancer Controller turns `Ingress` objects into ALB host rules (one shared ALB via an *IngressGroup*) and registers **pod IPs** directly (`target-type: ip`). |
 | 4 | App path | The React SPA is served by `frontend`, then calls `api.example.com`; the Go API talks to the MongoDB replica set through the headless service `mongo-svc`. |
 | 5 | Storage | `volumeClaimTemplates` → StorageClass `ebs-gp3` → EBS CSI controller creates a gp3 volume per AZ → PV bound and mounted. |
-| 6 | Metrics | Prometheus scrapes nodes and kube-state-metrics, and the API once `/metrics` is added. |
+| 6 | Metrics | Prometheus scrapes nodes and kube-state-metrics, and the API once `/metrics` is added. Developers Limitation |
 | 7 | GitOps | GitLab CI pushes an image and bumps the tag in the manifests repo; Argo CD pulls and syncs `voting-app` and the monitoring stack. |
 | 8 | IRSA | Controller ServiceAccounts assume scoped IAM roles through the cluster OIDC provider – no static AWS keys. |
 
 ---
 
-## 2. Tech stack
+## 2. Tech stack | Developer -> Cloud Academy | Devops -> Ozair Khan  
 
 <p align="center">
   <img src="docs/images/tech-stack.png" alt="Technology stack" width="100%" />
@@ -149,7 +149,7 @@ docker run -d -p 3000:8080 voteapp-frontend
   <img src="docs/images/ebs-csi-dynamic-provisioning.png" alt="EBS CSI dynamic provisioning flow" width="100%" />
 </p>
 
-> **Where the repo is today.** `votingApp-manifestFiles/pv.yml` defines three **static** `local` PVs pinned to `node-01`/`node-02`, and `mongo-st-set.yml` uses `storageClassName: ""`. That is the k3s setup. The CSI-based design below is what runs on EKS, and `pv.yml` is **not applied** there.
+> **Where the repo is today.** `votingApp-manifestFiles/pv.yml` defines three **static** `local` PVs pinned to `node-01`/`node-02`, and `mongo-st-set.yml` uses `storageClassName: ""`. That is the k3s local testing  setup. The CSI-based design below is what runs on EKS, and `pv.yml` is **not applied** there.
 
 **1. Install the driver as an EKS add-on (IRSA role, no node-role permissions)**
 
