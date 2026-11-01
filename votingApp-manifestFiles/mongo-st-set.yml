@@ -1,4 +1,3 @@
-apiVersion: apps/v1
 kind: StatefulSet
 metadata:
   name: mongo-st-set
@@ -57,3 +56,4 @@ spec:
           requests:
             storage: 1G
       
+
