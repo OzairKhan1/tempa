@@ -154,7 +154,7 @@ docker run -d -p 3000:8080 voteapp-frontend
 **1. Install the driver as an EKS add-on (IRSA role, no node-role permissions)**
 
 ```bash
-export CLUSTER=voting-eks REGION=eu-north-1
+export CLUSTER=voting-eks REGION=us-east-1
 eksctl utils associate-iam-oidc-provider --cluster $CLUSTER --region $REGION --approve
 
 eksctl create iamserviceaccount --cluster $CLUSTER --region $REGION \
@@ -182,33 +182,8 @@ volumeBindingMode: WaitForFirstConsumer   # create the volume in the AZ the pod 
 allowVolumeExpansion: true
 reclaimPolicy: Delete                     # use Retain if you must keep data after PVC deletion
 ```
-
-**3. Change the StatefulSet** – only the storage class changes; delete `pv.yml`:
-
-```yaml
-  volumeClaimTemplates:
-    - metadata:
-        name: mongodb-persistent-storage-claim
-      spec:
-        accessModes: ["ReadWriteOnce"]
-        storageClassName: ebs-gp3          # was: ""
-        resources:
-          requests:
-            storage: 5Gi                   # was 1G
-```
-
-Also swap the soft `podAntiAffinity` for AZ spreading, because an EBS volume cannot move between AZs:
-
-```yaml
-      topologySpreadConstraints:
-        - maxSkew: 1
-          topologyKey: topology.kubernetes.io/zone
-          whenUnsatisfiable: DoNotSchedule
-          labelSelector:
-            matchLabels: { role: db }
-```
-
-**4. Verify**
+  
+**3. Verify**
 
 ```bash
 kubectl get sc ebs-gp3
@@ -227,7 +202,7 @@ aws ec2 describe-volumes --filters Name=tag:kubernetes.io/created-for/pvc/namesp
 
 `Pipeline-gitlab.yml` has ten stages: `validate → secret_scan → test → sonarqube → dependency_scan → trivy_fs_scan → docker_build → trivy_image_scan → docker_push → update_manifests`. Images are tagged `v$CI_PIPELINE_IID`. The last job clones `OzairKhan1/Kubernetes-ManifestFiles`, rewrites the image tag and pushes, which is the change Argo CD reacts to.
 
-**Argo CD** (Helm, behind the ALB – TLS ends at the ALB, so the server runs in insecure/HTTP mode):
+**Argo CD** Both Script and UI-Method is Shown for Argo Cd. (Helm, behind the ALB – TLS ends at the ALB, so the server runs in insecure/HTTP mode):
 
 ```bash
 helm repo add argo https://argoproj.github.io/argo-helm && helm repo update
@@ -309,16 +284,36 @@ helm install aws-load-balancer-controller eks/aws-load-balancer-controller -n ku
   --set clusterName=$CLUSTER --set serviceAccount.create=false --set serviceAccount.name=aws-load-balancer-controller
 ```
 
-**MongoDB replica set** – the manifests start `mongod --replSet rs0` but nothing runs `rs.initiate`, so do it once (or turn it into a Job):
+**MongoDB replica set** – the manifests start `mongod --replSet rs0` but nothing runs `rs.initiate`, so do it once (or turn it into a Job). The Script helps to Initilize the Primary Database and 2 Secondary Databases. :
 
 ```bash
-kubectl -n voting-app-ns exec mongo-st-set-0 -- mongo --eval '
-rs.initiate({_id:"rs0", members:[
- {_id:0, host:"mongo-st-set-0.mongo-svc.voting-app-ns.svc.cluster.local:27017"},
- {_id:1, host:"mongo-st-set-1.mongo-svc.voting-app-ns.svc.cluster.local:27017"},
- {_id:2, host:"mongo-st-set-2.mongo-svc.voting-app-ns.svc.cluster.local:27017"}]})'
+kubectl exec -i -n voting-app-ns mongo-st-set-0 -- mongo --quiet <<'EOF'
+rs.initiate({
+  _id: "rs0",   // must match your --replSet value
+  members: [
+    {_id: 0, host: "mongo-st-set-0.mongo-svc:27017"},
+    {_id: 1, host: "mongo-st-set-1.mongo-svc:27017"},
+    {_id: 2, host: "mongo-st-set-2.mongo-svc:27017"}
+  ]
+})
+EOF
 ```
+---
 
+**Adding Data to Database**
+```bash
+cat << EOF | kubectl exec -it mongo-st-set-0 -- mongo
+use langdb;
+db.languages.insert({"name" : "csharp", "codedetail" : { "usecase" : "system, web, server-side", "rank" : 5, "compiled" : false, "homepage" : "https://dotnet.microsoft.com/learn/csharp", "download" : "https://dotnet.microsoft.com/download/", "votes" : 0}});
+db.languages.insert({"name" : "python", "codedetail" : { "usecase" : "system, web, server-side", "rank" : 3, "script" : false, "homepage" : "https://www.python.org/", "download" : "https://www.python.org/downloads/", "votes" : 0}});
+db.languages.insert({"name" : "javascript", "codedetail" : { "usecase" : "web, client-side", "rank" : 7, "script" : false, "homepage" : "https://en.wikipedia.org/wiki/JavaScript", "download" : "n/a", "votes" : 0}});
+db.languages.insert({"name" : "go", "codedetail" : { "usecase" : "system, web, server-side", "rank" : 12, "compiled" : true, "homepage" : "https://golang.org", "download" : "https://golang.org/dl/", "votes" : 0}});
+db.languages.insert({"name" : "java", "codedetail" : { "usecase" : "system, web, server-side", "rank" : 1, "compiled" : true, "homepage" : "https://www.java.com/en/", "download" : "https://www.java.com/en/download/", "votes" : 0}});
+db.languages.insert({"name" : "nodejs", "codedetail" : { "usecase" : "system, web, server-side", "rank" : 20, "script" : false, "homepage" : "https://nodejs.org/en/", "download" : "https://nodejs.org/en/download/", "votes" : 0}});
+
+db.languages.find().pretty();
+EOF
+```
 ---
 
 ## 8. Ingress (ALB)
