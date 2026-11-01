@@ -1,0 +1,10 @@
+.git
+.github
+.gitignore
+.DS_Store
+api
+releases
+README.md
+Dockerfile
+.dockerignore
+

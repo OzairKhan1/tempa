@@ -1,0 +1,80 @@
+
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: mongo-pv-0
+spec:
+  capacity:
+    storage: 1Gi
+  volumeMode: Filesystem
+  accessModes:
+    - ReadWriteOnce
+  persistentVolumeReclaimPolicy: Retain
+  storageClassName: ""
+  local:
+    path: /mnt/mongodb/mongo-0
+  nodeAffinity:
+    required:
+      nodeSelectorTerms:
+        - matchExpressions:
+            - key: kubernetes.io/hostname
+              operator: In
+              values:
+                - node-01
+  claimRef:
+    namespace: voting-app-ns
+    name: mongodb-persistent-storage-claim-mongo-st-set-0
+---
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: mongo-pv-1
+spec:
+  capacity:
+    storage: 1Gi
+  volumeMode: Filesystem
+  accessModes:
+    - ReadWriteOnce
+  persistentVolumeReclaimPolicy: Retain
+  storageClassName: ""
+  local:
+    path: /mnt/mongodb/mongo-1
+  nodeAffinity:
+   required:
+      nodeSelectorTerms:
+        - matchExpressions:
+            - key: kubernetes.io/hostname
+              operator: In
+              values:
+                - node-02
+  claimRef:
+    namespace: voting-app-ns
+    name: mongodb-persistent-storage-claim-mongo-st-set-1
+---
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: mongo-pv-2
+spec:
+  capacity:
+    storage: 1Gi
+  volumeMode: Filesystem
+  accessModes:
+    - ReadWriteOnce
+  persistentVolumeReclaimPolicy: Retain
+  storageClassName: ""
+  local:
+    path: /mnt/mongodb/mongo-2
+  nodeAffinity:
+    required:
+      nodeSelectorTerms:
+        - matchExpressions:
+            - key: kubernetes.io/hostname
+              operator: In
+              values:
+                - node-02
+  claimRef:
+    namespace: voting-app-ns
+    name: mongodb-persistent-storage-claim-mongo-st-set-2
+    
+   
