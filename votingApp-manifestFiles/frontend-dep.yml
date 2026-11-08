@@ -1,3 +1,14 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: frontend-env
+  namespace: voting-app-ns
+data:
+  env-config.js: |
+    window._env_ = {
+      API_BASE_URL: "http://184.195.119.37:30351",
+    };
+---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -22,13 +33,15 @@ spec:
     spec:
       containers:
       - name: frontend
-        image: ozairkhan1/voteapp-frontend-react:v11
+        image: ozairkhan1/voteapp-frontend-react:v14
         imagePullPolicy: Always
-        env:
-          - name: REACT_APP_APIHOSTPORT
-            value: "https://6ad4e3973505a3f5e8118787-4c2949.node-eu-13e2.iximiuz.com"   #add your API_Load_Balancer DNS manually here if app does not run
         ports:
         - containerPort: 8080
+        volumeMounts:
+        - name: env-config
+          mountPath: /usr/share/nginx/html/env-config.js
+          subPath: env-config.js
+          readOnly: true
         livenessProbe:
           httpGet:
             path: /ok
@@ -37,8 +50,12 @@ spec:
           periodSeconds: 5
         readinessProbe:
           httpGet:
-             path: /ok
-             port: 8080
+            path: /ok
+            port: 8080
           initialDelaySeconds: 5
           periodSeconds: 5
           successThreshold: 1
+      volumes:
+      - name: env-config
+        configMap:
+          name: frontend-env
