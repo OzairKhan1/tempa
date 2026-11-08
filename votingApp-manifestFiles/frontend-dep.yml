@@ -1,14 +1,3 @@
-apiVersion: v1
-kind: ConfigMap
-metadata:
-  name: frontend-env
-  namespace: voting-app-ns
-data:
-  env-config.js: |
-    window._env_ = {
-      API_BASE_URL: "http://184.195.119.37:30351",
-    };
----
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -33,7 +22,7 @@ spec:
     spec:
       containers:
       - name: frontend
-        image: ozairkhan1/voteapp-frontend-react:v14
+        image: ozairkhan1/voteapp-frontend-react:v16
         imagePullPolicy: Always
         ports:
         - containerPort: 8080
