@@ -1,4 +1,3 @@
-
 #!/bin/bash
 
 set -Eeuo pipefail
@@ -9,14 +8,10 @@ set -Eeuo pipefail
 
 NAMESPACE="voting-app-ns"
 STATEFULSET="mongo-st-set"
-MONGO_POD="mongo-st-set-0"
+MONGO_PODS=("mongo-st-set-0" "mongo-st-set-1" "mongo-st-set-2")
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$SCRIPT_DIR"
-
-# ==========================================================
-# FUNCTIONS
-# ==========================================================
 
 log() {
     echo
@@ -27,47 +22,105 @@ log() {
 
 error_handler() {
     echo
-    echo "ERROR: Deployment failed at line $1."
+    echo "ERROR: Script failed at line $1"
     exit 1
 }
 
 trap 'error_handler $LINENO' ERR
 
 # ==========================================================
-# Cluster: K3S & HELM INSTALATION 
-# ==========================================================
-sudo apt-get update
-sudo apt-get install -y curl
-
-curl -sfL https://get.k3s.io | INSTALL_K3S_EXEC="server --disable traefik --write-kubeconfig-mode 644" sh -
-
-mkdir -p ~/.kube
-sudo cp /etc/rancher/k3s/k3s.yaml ~/.kube/config
-sudo chown $USER:$USER ~/.kube/config
-chmod 600 ~/.kube/config
-export KUBECONFIG=~/.kube/config
-echo 'export KUBECONFIG=~/.kube/config' >> ~/.bashrc
-
-curl -fsSL https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash
-
-echo "Waiting..."
-sleep 20
-echo "Done!"
-
-
-
-# ==========================================================
-# STEP 1: CREATE MONGODB STORAGE DIRECTORIES
+# STEP 1: PREPARE K3S CLUSTER
 # ==========================================================
 
-log "Creating MongoDB storage directories"
+log "Preparing K3s cluster"
+
+if ! command -v curl >/dev/null 2>&1; then
+    sudo apt-get update
+    sudo apt-get install -y curl
+fi
+
+if ! command -v k3s >/dev/null 2>&1; then
+
+    log "Installing K3s server"
+
+    sudo mkdir -p /etc/rancher/k3s
+
+    sudo tee /etc/rancher/k3s/config.yaml >/dev/null <<'EOF'
+disable:
+  - traefik
+write-kubeconfig-mode: "644"
+EOF
+
+    curl -sfL https://get.k3s.io | \
+        INSTALL_K3S_EXEC="server" sh -
+
+else
+    echo "K3s is already installed. Skipping installation."
+fi
+
+# ==========================================================
+# STEP 2: CONFIGURE KUBECTL
+# ==========================================================
+
+log "Configuring kubeconfig"
+
+mkdir -p "$HOME/.kube"
+
+sudo cp /etc/rancher/k3s/k3s.yaml "$HOME/.kube/config"
+
+sudo chown "$(id -u):$(id -g)" "$HOME/.kube/config"
+
+chmod 600 "$HOME/.kube/config"
+
+export KUBECONFIG="$HOME/.kube/config"
+
+# Avoid duplicate entries in .bashrc
+
+if ! grep -Fxq 'export KUBECONFIG=$HOME/.kube/config' "$HOME/.bashrc" 2>/dev/null; then
+    echo 'export KUBECONFIG=$HOME/.kube/config' >> "$HOME/.bashrc"
+fi
+
+# ==========================================================
+# STEP 3: WAIT FOR K3S NODE
+# ==========================================================
+
+log "Waiting for Kubernetes node readiness"
+
+kubectl wait \
+    --for=condition=Ready \
+    nodes --all \
+    --timeout=180s
+
+kubectl get nodes -o wide
+
+# ==========================================================
+# STEP 4: INSTALL HELM
+# ==========================================================
+
+log "Installing Helm"
+
+if ! command -v helm >/dev/null 2>&1; then
+
+    curl -fsSL https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash
+
+else
+    echo "Helm is already installed. Skipping installation."
+fi
+
+helm version
+
+# ==========================================================
+# STEP 5: CREATE MONGODB STORAGE DIRECTORIES
+# ==========================================================
+
+log "Creating MongoDB directories"
 
 sudo mkdir -p /mnt/mongodb/mongo-0
 sudo mkdir -p /mnt/mongodb/mongo-1
 sudo mkdir -p /mnt/mongodb/mongo-2
 
 # ==========================================================
-# STEP 2: CREATE PERSISTENT VOLUMES
+# STEP 6: CREATE PERSISTENT VOLUMES
 # ==========================================================
 
 log "Applying Persistent Volumes"
@@ -75,66 +128,81 @@ log "Applying Persistent Volumes"
 kubectl apply -f pv.yml
 
 # ==========================================================
-# STEP 3: CREATE NAMESPACE
+# STEP 7: CREATE NAMESPACE
 # ==========================================================
 
-log "Creating Kubernetes namespace"
+log "Creating namespace"
 
 kubectl create namespace "$NAMESPACE" \
     --dry-run=client -o yaml | kubectl apply -f -
 
 # ==========================================================
-# STEP 4: DEPLOY MONGODB STATEFULSET
+# STEP 8: APPLY MONGODB SECRET AND SERVICE FIRST
+# ==========================================================
+
+log "Applying MongoDB Secret and Headless Service"
+
+kubectl apply \
+    -f mongo-secret.yml \
+    -f mongo-svc.yml \
+    -n "$NAMESPACE"
+
+# ==========================================================
+# STEP 9: DEPLOY MONGODB STATEFULSET
 # ==========================================================
 
 log "Deploying MongoDB StatefulSet"
 
 kubectl apply -f mongo-st-set.yml -n "$NAMESPACE"
 
-log "Waiting for MongoDB StatefulSet pods"
-
-kubectl rollout status statefulset/"$STATEFULSET" \
-    -n "$NAMESPACE" \
-    --timeout=600s
-
 # ==========================================================
-# STEP 5: APPLY MONGODB CONFIGURATION
+# STEP 10: WAIT FOR ALL MONGODB PODS
 # ==========================================================
 
-log "Applying MongoDB Secret and Service"
+log "Waiting for MongoDB pods"
 
-kubectl apply -f mongo-secret.yml -f mongo-svc.yml \
-    -n "$NAMESPACE"
-
-# ==========================================================
-# STEP 6: WAIT FOR MONGODB PODS
-# ==========================================================
-
-log "Waiting for MongoDB pods to become ready"
-
-for pod in mongo-st-set-0 mongo-st-set-1 mongo-st-set-2
+for pod in "${MONGO_PODS[@]}"
 do
+    echo "Waiting for $pod..."
+
     kubectl wait \
         --for=condition=Ready \
-        pod/"$pod" \
+        "pod/$pod" \
         -n "$NAMESPACE" \
         --timeout=300s
 done
 
+echo "All MongoDB pods are Ready."
+
+kubectl get pods -n "$NAMESPACE" -o wide
+
 # ==========================================================
-# STEP 7: INITIALIZE MONGODB REPLICA SET
+# STEP 11: INITIALIZE REPLICA SET IF REQUIRED
 # ==========================================================
 
-log "Checking MongoDB Replica Set"
+log "Checking MongoDB replica set"
 
-kubectl exec -i -n "$NAMESPACE" "$MONGO_POD" -- mongo --quiet <<'EOF'
-try {
-    rs.status();
-    print("Replica set is already initialized.");
-} catch (e) {
-    if (e.code === 94 || e.codeName === "NotYetInitialized") {
-        print("Initializing MongoDB replica set...");
+RS_STATUS=$(kubectl exec -n "$NAMESPACE" mongo-st-set-0 -- \
+    mongo --quiet --eval '
+    try {
+        rs.status();
+        print("INITIALIZED");
+    } catch(e) {
+        if (e.code === 94 || e.codeName === "NotYetInitialized") {
+            print("NOT_INITIALIZED");
+        } else {
+            printjson(e);
+            quit(1);
+        }
+    }
+')
 
+if echo "$RS_STATUS" | grep -qx "NOT_INITIALIZED"; then
+
+    echo "Replica set is not initialized. Initializing now."
+
+    kubectl exec -n "$NAMESPACE" mongo-st-set-0 -- \
+        mongo --quiet --eval '
         rs.initiate({
             _id: "rs0",
             members: [
@@ -143,48 +211,67 @@ try {
                 {_id: 2, host: "mongo-st-set-2.mongo-svc:27017"}
             ]
         });
-    } else {
-        throw e;
-    }
-}
-EOF
+    '
+
+else
+    echo "Replica set is already initialized."
+fi
 
 # ==========================================================
-# STEP 8: WAIT FOR MONGODB PRIMARY
+# STEP 12: DISCOVER ACTUAL PRIMARY
 # ==========================================================
 
 log "Waiting for MongoDB PRIMARY election"
 
-PRIMARY_READY=false
+PRIMARY_POD=""
 
 for attempt in $(seq 1 60)
 do
-    if kubectl exec -n "$NAMESPACE" "$MONGO_POD" -- \
-        mongo --quiet --eval 'db.isMaster().ismaster' 2>/dev/null \
-        | grep -q "true"; then
 
-        PRIMARY_READY=true
-        break
-    fi
+    for pod in "${MONGO_PODS[@]}"
+    do
 
-    echo "Waiting for PRIMARY... ($attempt/60)"
+        STATUS=$(kubectl exec -n "$NAMESPACE" "$pod" -- \
+            mongo --quiet --eval '
+            print(db.isMaster().ismaster ? "PRIMARY" : "SECONDARY");
+            ' 2>/dev/null || true)
+
+        if echo "$STATUS" | grep -qx "PRIMARY"; then
+            PRIMARY_POD="$pod"
+            break 2
+        fi
+
+    done
+
+    echo "No PRIMARY detected yet. Attempt $attempt/60"
+
     sleep 5
+
 done
 
-if [ "$PRIMARY_READY" != "true" ]; then
-    echo "MongoDB PRIMARY election timed out."
+if [[ -z "$PRIMARY_POD" ]]; then
+    echo "ERROR: MongoDB PRIMARY election timed out."
+
+    for pod in "${MONGO_PODS[@]}"
+    do
+        echo "Replica status from $pod:"
+        kubectl exec -n "$NAMESPACE" "$pod" -- \
+            mongo --quiet --eval 'rs.status()' || true
+    done
+
     exit 1
 fi
 
-echo "MongoDB PRIMARY is ready."
+echo "MongoDB PRIMARY detected: $PRIMARY_POD"
 
 # ==========================================================
-# STEP 9: INSERT INITIAL DATABASE RECORDS
+# STEP 13: INITIALIZE DATABASE RECORDS
 # ==========================================================
 
 log "Initializing MongoDB database"
 
-kubectl exec -i -n "$NAMESPACE" "$MONGO_POD" -- mongo --quiet <<'EOF'
+kubectl exec -i -n "$NAMESPACE" "$PRIMARY_POD" -- \
+    mongo --quiet <<'EOF'
 
 use langdb;
 
@@ -284,58 +371,66 @@ db.languages.update(
     {upsert: true}
 );
 
-print("Current language records:");
+print("Database records:");
 
 db.languages.find().pretty();
 
 EOF
 
 # ==========================================================
-# STEP 10: DEPLOY API
+# STEP 14: DEPLOY API
 # ==========================================================
 
 log "Deploying API"
 
-kubectl apply -f api-dep.yml -f api-svc.yml \
+kubectl apply \
+    -f api-dep.yml \
+    -f api-svc.yml \
     -n "$NAMESPACE"
 
 # ==========================================================
-# STEP 11: DEPLOY FRONTEND
+# STEP 15: DEPLOY FRONTEND
 # ==========================================================
 
 log "Deploying Frontend"
 
-kubectl apply -f frontend-dep.yml -f frontend-svc.yml \
+kubectl apply \
+	-f frontend-configmap.yml \
+    -f frontend-dep.yml \
+    -f frontend-svc.yml \
     -n "$NAMESPACE"
 
 # ==========================================================
-# STEP 12: WAIT FOR APPLICATION DEPLOYMENTS
+# STEP 16: WAIT FOR APPLICATION DEPLOYMENTS
 # ==========================================================
 
-log "Waiting for API and Frontend deployments"
+log "Waiting for application rollouts"
 
-kubectl rollout status deployment \
-    -n "$NAMESPACE" \
-    --timeout=300s
+while IFS= read -r deployment
+do
+    kubectl rollout status "$deployment" \
+        -n "$NAMESPACE" \
+        --timeout=300s
+done < <(kubectl get deployments -n "$NAMESPACE" -o name)
 
 # ==========================================================
-# STEP 13: DEPLOYMENT SUMMARY
+# STEP 17: DEPLOYMENT SUMMARY
 # ==========================================================
 
 log "DEPLOYMENT COMPLETED SUCCESSFULLY"
 
 echo
+echo "MongoDB PRIMARY: $PRIMARY_POD"
 echo "Namespace: $NAMESPACE"
-echo
 
+echo
 kubectl get pods -n "$NAMESPACE"
-echo
 
+echo
 kubectl get svc -n "$NAMESPACE"
-echo
 
+echo
 kubectl get pvc -n "$NAMESPACE"
 
 echo
-echo "All resources have been applied successfully."
-
+echo "Deployment completed successfully!"

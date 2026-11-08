@@ -6,11 +6,11 @@ metadata:
 data:
   env-config.js: |
     window._env_ = {
-      API_BASE_URL: "https://api.cloudhatt.com",
+      API_BASE_URL: "http://35.171.129.136:30351",
       SITE: {
         title: "Language Vote App",
         owner: "Deployed & operated by Ozair Khan · Cloud & DevOps Engineer",
-        tagline: "Three-tier app on K3s with an AWS ALB ingress, HTTPS and GitOps delivery",
+        tagline: "Three-tier app on both K3s as well as EKS Cluster with an AWS ALB ingress, HTTPS and GitOps delivery",
         footer: "App © CloudAcademy ❤ · Infrastructure, CI/CD and deployment by Ozair Khan",
         sections: [
           {
@@ -28,7 +28,7 @@ data:
             title: "Platform & delivery",
             items: [
               { name: "Docker", logo: "docker.svg" },
-              { name: "Kubernetes (K3s)", logo: "kubernetes.svg" },
+              { name: "Kubernetes ", logo: "kubernetes.svg" },
               { name: "Helm", logo: "helm.svg" },
               { name: "Terraform", logo: "terraform.svg" },
               { name: "GitLab CI", logo: "gitlab.svg" },
