@@ -1,3 +1,4 @@
+
 #!/bin/bash
 
 set -Eeuo pipefail
@@ -180,28 +181,25 @@ kubectl get pods -n "$NAMESPACE" -o wide
 # ==========================================================
 # STEP 11: INITIALIZE AND VERIFY MONGODB REPLICA SET
 # ==========================================================
-
 log "Initializing and verifying MongoDB Replica Set"
 
+# Wait until all 3 members resolve via DNS (prevents NodeNotFound)
+for pod in "${MONGO_PODS[@]}"; do
+    for i in $(seq 1 30); do
+        kubectl exec -n "$NAMESPACE" mongo-st-set-0 -- \
+            getent hosts "$pod.mongo-svc" >/dev/null 2>&1 && break
+        echo "Waiting for DNS: $pod.mongo-svc ($i/30)"; sleep 2
+    done
+done
+
+set +e
 RS_OUTPUT=$(kubectl exec -i -n "$NAMESPACE" mongo-st-set-0 -- \
     mongo --quiet --eval '
-
-    // Check whether replica set is already initialized
-
-    var initialized = false;
-
-    try {
-        rs.status();
-        initialized = true;
-        print("Replica set already initialized.");
-
-    } catch(e) {
-
-        if (e.code === 94 || e.codeName === "NotYetInitialized") {
-
+    var s = rs.status();
+    if (s.ok !== 1) {
+        if (s.code === 94 || s.codeName === "NotYetInitialized") {
             print("Initializing replica set...");
-
-            var result = rs.initiate({
+            var r = rs.initiate({
                 _id: "rs0",
                 members: [
                     {_id: 0, host: "mongo-st-set-0.mongo-svc:27017"},
@@ -209,76 +207,82 @@ RS_OUTPUT=$(kubectl exec -i -n "$NAMESPACE" mongo-st-set-0 -- \
                     {_id: 2, host: "mongo-st-set-2.mongo-svc:27017"}
                 ]
             });
-
-            printjson(result);
-
-            if (result.ok !== 1) {
-                print("Replica set initialization failed.");
-                quit(1);
-            }
-
+            printjson(r);
+            if (r.ok !== 1) { quit(1); }
         } else {
-            printjson(e);
-            quit(1);
+            print("rs.status() failed:"); printjson(s); quit(1);
         }
+    } else {
+        print("Replica set already initialized.");
     }
 
-    // Verify election and discover actual PRIMARY
-
-    var elected = false;
-
-    for (var i = 0; i < 15; i++) {
-
-        var status = rs.status();
-
-        var primary = status.members.filter(function(member) {
-            return member.stateStr === "PRIMARY";
-        });
-
-        var secondaries = status.members.filter(function(member) {
-            return member.stateStr === "SECONDARY";
-        });
-
-        if (primary.length === 1 && secondaries.length === 2) {
-
-            var primaryPod = primary[0].name.split(".")[0];
-
-            print("PRIMARY_POD=" + primaryPod);
-            print("PRIMARY: " + primary[0].name);
-            print("SECONDARIES: " + secondaries.length);
-
-            elected = true;
-            break;
+    var primaryName = null;
+    for (var i = 0; i < 30; i++) {
+        s = rs.status();
+        if (s.ok === 1 && s.members) {
+            var p = s.members.filter(function(m){return m.stateStr==="PRIMARY";});
+            var sec = s.members.filter(function(m){return m.stateStr==="SECONDARY";});
+            if (p.length === 1 && sec.length === 2) { primaryName = p[0].name; break; }
         }
-
         sleep(1000);
     }
-
-    if (!elected) {
-        print("Replica set election is not complete.");
-        printjson(rs.status());
-        quit(1);
-    }
-
-    print("Replica set is healthy.");
-
-') 
+    if (!primaryName) { print("Election not complete:"); printjson(rs.status()); quit(1); }
+    print("PRIMARY_POD=" + primaryName.split(".")[0]);
+' 2>&1)
+RS_RC=$?
+set -e
 
 echo "$RS_OUTPUT"
+if [[ $RS_RC -ne 0 ]]; then
+    echo "ERROR: replica set setup failed (exit $RS_RC)"
+    exit 1
+fi
+# ==========================================================
+# STEP 12: DISCOVER ACTUAL PRIMARY
+# ==========================================================
 
-# Extract actual PRIMARY pod
+log "Waiting for MongoDB PRIMARY election"
 
-PRIMARY_POD=$(echo "$RS_OUTPUT" | \
-    sed -n 's/^PRIMARY_POD=//p' | tail -n 1)
+PRIMARY_POD=""
+
+for attempt in $(seq 1 60)
+do
+
+    for pod in "${MONGO_PODS[@]}"
+    do
+
+        STATUS=$(kubectl exec -n "$NAMESPACE" "$pod" -- \
+            mongo --quiet --eval '
+            print(db.isMaster().ismaster ? "PRIMARY" : "SECONDARY");
+            ' 2>/dev/null || true)
+
+        if echo "$STATUS" | grep -qx "PRIMARY"; then
+            PRIMARY_POD="$pod"
+            break 2
+        fi
+
+    done
+
+    echo "No PRIMARY detected yet. Attempt $attempt/60"
+
+    sleep 5
+
+done
 
 if [[ -z "$PRIMARY_POD" ]]; then
-    echo "ERROR: Could not identify MongoDB PRIMARY."
+    echo "ERROR: MongoDB PRIMARY election timed out."
+
+    for pod in "${MONGO_PODS[@]}"
+    do
+        echo "Replica status from $pod:"
+        kubectl exec -n "$NAMESPACE" "$pod" -- \
+            mongo --quiet --eval 'rs.status()' || true
+    done
+
     exit 1
 fi
 
-echo
 echo "MongoDB PRIMARY detected: $PRIMARY_POD"
-
 
 # ==========================================================
 # STEP 13: INITIALIZE DATABASE RECORDS
@@ -411,7 +415,7 @@ kubectl apply \
 log "Deploying Frontend"
 
 kubectl apply \
-        -f frontend-configmap.yml \
+    -f frontend-configmap.yml \
     -f frontend-dep.yml \
     -f frontend-svc.yml \
     -n "$NAMESPACE"
@@ -447,9 +451,7 @@ kubectl get svc -n "$NAMESPACE"
 
 echo
 kubectl get pvc -n "$NAMESPACE"
-kubectl config set-context --current --namespace voting-app-ns
 
-alias kcl="kubectl"   # This is for the sake of easyness
 echo
 echo "Deployment completed successfully!"
 
