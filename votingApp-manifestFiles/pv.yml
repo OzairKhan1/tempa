@@ -20,7 +20,7 @@ spec:
             - key: kubernetes.io/hostname
               operator: In
               values:
-                - ip-172-31-15-157
+                - ip-172-31-17-171
   claimRef:
     namespace: voting-app-ns
     name: mongodb-persistent-storage-claim-mongo-st-set-0
@@ -46,7 +46,7 @@ spec:
             - key: kubernetes.io/hostname
               operator: In
               values:
-                - ip-172-31-15-157
+                - ip-172-31-17-171
   claimRef:
     namespace: voting-app-ns
     name: mongodb-persistent-storage-claim-mongo-st-set-1
@@ -72,7 +72,7 @@ spec:
             - key: kubernetes.io/hostname
               operator: In
               values:
-                - ip-172-31-15-157
+                - ip-172-31-17-171
   claimRef:
     namespace: voting-app-ns
     name: mongodb-persistent-storage-claim-mongo-st-set-2

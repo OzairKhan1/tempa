@@ -6,7 +6,7 @@ metadata:
 data:
   env-config.js: |
     window._env_ = {
-      API_BASE_URL: "http://35.171.129.136:30351",
+      API_BASE_URL: "https://api.cloudhatt.com",
       SITE: {
         title: "Language Vote App",
         owner: "Deployed & operated by Ozair Khan · Cloud & DevOps Engineer",
