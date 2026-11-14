@@ -30,71 +30,6 @@ error_handler() {
 trap 'error_handler $LINENO' ERR
 
 # ==========================================================
-# STEP 1: PREPARE K3S CLUSTER
-# ==========================================================
-
-log "Preparing K3s cluster"
-
-if ! command -v curl >/dev/null 2>&1; then
-    sudo apt-get update
-    sudo apt-get install -y curl
-fi
-
-if ! command -v k3s >/dev/null 2>&1; then
-
-    log "Installing K3s server"
-
-    sudo mkdir -p /etc/rancher/k3s
-
-    sudo tee /etc/rancher/k3s/config.yaml >/dev/null <<'EOF'
-disable:
-  - traefik
-write-kubeconfig-mode: "644"
-EOF
-
-    curl -sfL https://get.k3s.io | \
-        INSTALL_K3S_EXEC="server" sh -
-
-else
-    echo "K3s is already installed. Skipping installation."
-fi
-
-# ==========================================================
-# STEP 2: CONFIGURE KUBECTL
-# ==========================================================
-
-log "Configuring kubeconfig"
-
-mkdir -p "$HOME/.kube"
-
-sudo cp /etc/rancher/k3s/k3s.yaml "$HOME/.kube/config"
-
-sudo chown "$(id -u):$(id -g)" "$HOME/.kube/config"
-
-chmod 600 "$HOME/.kube/config"
-
-export KUBECONFIG="$HOME/.kube/config"
-
-# Avoid duplicate entries in .bashrc
-
-if ! grep -Fxq 'export KUBECONFIG=$HOME/.kube/config' "$HOME/.bashrc" 2>/dev/null; then
-    echo 'export KUBECONFIG=$HOME/.kube/config' >> "$HOME/.bashrc"
-fi
-
-# ==========================================================
-# STEP 3: WAIT FOR K3S NODE
-# ==========================================================
-
-log "Waiting for Kubernetes node readiness"
-
-kubectl wait \
-    --for=condition=Ready \
-    nodes --all \
-    --timeout=180s
-
-kubectl get nodes -o wide
-
-# ==========================================================
 # STEP 4: INSTALL HELM
 # ==========================================================
 
@@ -109,24 +44,6 @@ else
 fi
 
 helm version
-
-# ==========================================================
-# STEP 5: CREATE MONGODB STORAGE DIRECTORIES
-# ==========================================================
-
-log "Creating MongoDB directories"
-
-sudo mkdir -p /mnt/mongodb/mongo-0
-sudo mkdir -p /mnt/mongodb/mongo-1
-sudo mkdir -p /mnt/mongodb/mongo-2
-
-# ==========================================================
-# STEP 6: CREATE PERSISTENT VOLUMES
-# ==========================================================
-
-log "Applying Persistent Volumes"
-
-kubectl apply -f pv.yml
 
 # ==========================================================
 # STEP 7: CREATE NAMESPACE
